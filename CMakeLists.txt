@@ -4,8 +4,24 @@ project(snake3 VERSION 0.1.0 LANGUAGES C CXX)
 include(CTest)
 enable_testing()
 
-add_executable(snake3 src/main.cpp)
+add_executable(snake3 src/snake3.cpp)
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 include(CPack)
+
+find_package(glfw3 REQUIRED FATAL_ERROR)
+find_package(Vulkan REQUIRED FATAL_ERROR)
+
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+
+target_link_libraries(snake3 glfw
+                             vulkan
+                             dl
+                             pthread
+                             X11
+                             Xxf86vm
+                             Xrandr
+                             Xi)

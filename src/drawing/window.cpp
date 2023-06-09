@@ -2,10 +2,16 @@
 
 #include "../snake3.hpp"
 
-window::window()
+window::window():
+    loggable(__func__)
 {
-    glfwInit();
-    wnd = glfwCreateWindow(1280, 720, "snake3", nullptr, nullptr);
+    if (GLFW_FALSE == glfwInit())
+        runtime_error("failed to init GLFW.");
+    
+    wnd = glfwCreateWindow(DEFAULT_WIDTH, DEFAULT_HEIGHT, "snake3", nullptr, nullptr);
+
+    if (nullptr == wnd)
+        runtime_error("failed to create window.");
 }
 
 window::~window()

@@ -1,8 +1,10 @@
 /// snake3.hpp
 
-#include <iostream>
-
-// GLFW
+/**************************************************
+ *
+ *                     GLFW
+ *
+ **************************************************/
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -12,13 +14,37 @@
 #include <glm/vec4.hpp>
 #include <glm/mat4x4.hpp>
 
-// vulkan
+/**************************************************
+ *
+ *				       vulkan
+ *
+ **************************************************/
 
 #include <vulkan/vulkan.hpp>
 
-// snake3
+/**************************************************
+ *
+ *               standard library
+ *
+ **************************************************/
 
-#include "utils/singleton.hpp"
+#include <algorithm>
+#include <array>
+#include <chrono>
+#include <queue>
+#include <thread>
+#include <iostream>
+#include <vector>
+
+/**************************************************
+ *
+ *               		snake3
+ *
+ **************************************************/
+
+#include "helpers/utils.hpp"
+#include "helpers/singleton.hpp"
+#include "helpers/loggable.hpp"
 
 #include "drawing/window.hpp"
 #include "drawing/render.hpp"

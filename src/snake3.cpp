@@ -2,7 +2,8 @@
 
 #include "snake3.hpp"
 
-int main(int, char**){
-    //glfwInit();
-    std::cout << "Hello, from snake3!\n";
+int main(int, char**)
+{
+    render::get();
+    while (window::get()->poll());
 }

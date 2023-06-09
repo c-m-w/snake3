@@ -14,4 +14,11 @@
 
 // vulkan
 
-#include <vulkan/vulkan.h>
+#include <vulkan/vulkan.hpp>
+
+// snake3
+
+#include "utils/singleton.hpp"
+
+#include "drawing/window.hpp"
+#include "drawing/render.hpp"

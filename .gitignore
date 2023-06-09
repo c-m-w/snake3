@@ -9,3 +9,6 @@ CMakeCache.txt
 DartConfiguration.tcl
 Makefile
 snake3
+
+# vscode
+.vscode/

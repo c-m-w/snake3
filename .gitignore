@@ -1,0 +1,11 @@
+### .gitignore
+
+# CMake
+CMakeFiles/
+Testing/
+build/
+CMakeCache.txt
+*.cmake
+DartConfiguration.tcl
+Makefile
+snake3

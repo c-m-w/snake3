@@ -1,13 +1,13 @@
 /// dependable.hpp
 
-template<typename T, typename ... Ts>
+template<typename ... Ts>
 class dependable
 {
 public:
 
     dependable()
     {
-        T::get();
-        dependable<Ts...>();
+        static_assert((std::is_base_of<singleton<Ts>, Ts>::value, ...), "Ts... need to inherit from singleton<Ts> to use dependable.");
+        (Ts::get(), ...);
     }
 };

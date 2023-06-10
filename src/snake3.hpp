@@ -42,8 +42,9 @@
  *
  **************************************************/
 
-#include "helpers/utils.hpp"
 #include "helpers/singleton.hpp"
+#include "helpers/utils.hpp"
+#include "helpers/dependable.hpp"
 #include "helpers/loggable.hpp"
 #include "helpers/settings.hpp"
 

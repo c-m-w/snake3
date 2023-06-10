@@ -5,5 +5,5 @@
 int main(int, char**)
 {
     render::get();
-    while (window::get()->poll());
+    //while (window::get()->poll());
 }

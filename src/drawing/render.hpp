@@ -2,7 +2,7 @@
 
 #pragma once
 
-class render: public singleton<render>, loggable
+class render: public singleton<render>, loggable, dependable<window>
 {
 private:
 

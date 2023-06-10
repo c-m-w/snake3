@@ -18,6 +18,29 @@ namespace std
     };
 }
 
+void render::create_instance()
+{
+    vk::ApplicationInfo app_info(
+        "snake3",
+        VK_MAKE_VERSION(1, 0, 0),
+        "no engine",
+        VK_MAKE_VERSION(1, 0, 0),
+        VK_API_VERSION_1_0
+    );
+
+    auto const [glfw_extensions, n_glfw_extensions] = window::get()->get_extensions();
+
+    vk::InstanceCreateInfo create_info(
+        vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR,
+        &app_info,
+        0,
+        nullptr,
+        n_glfw_extensions,
+        glfw_extensions
+    );
+
+    inst = vk::createInstanceUnique(create_info);
+}
 
 std::size_t render::get_device_score(vk::PhysicalDevice const & dev)
 {
@@ -64,9 +87,20 @@ void render::pick_gpu()
     gpu = dev;
 }
 
+void render::get_surface()
+{
+    VkSurfaceKHR tmp;
+
+    if (VK_SUCCESS != glfwCreateWindowSurface(*inst, *window::get(), nullptr, &tmp))
+        runtime_error("unable to create surface.");
+    
+    surface = vk::UniqueSurfaceKHR(tmp, *inst);
+}
+
 render::render():
     loggable(__func__)
 {
-    inst = vk::createInstanceUnique({});
+    create_instance();
+    get_surface();
     pick_gpu();
 }

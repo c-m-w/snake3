@@ -11,10 +11,16 @@ private:
 
     GLFWwindow * wnd;
 
+    std::pair<const char**, std::size_t> get_extensions();
+    
 public:
 
     window();
     ~window();
 
     bool poll();
+
+    operator GLFWwindow * () const;
+
+    friend class render;
 };

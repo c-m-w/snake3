@@ -45,6 +45,7 @@
 #include "helpers/utils.hpp"
 #include "helpers/singleton.hpp"
 #include "helpers/loggable.hpp"
+#include "helpers/settings.hpp"
 
 #include "drawing/window.hpp"
 #include "drawing/render.hpp"

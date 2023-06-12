@@ -1,5 +1,7 @@
 /// dependable.hpp
 
+#pragma once
+
 template<typename ... Ts>
 class dependable
 {

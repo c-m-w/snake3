@@ -41,6 +41,9 @@ private:
     vk::UniqueDevice dev;
     swap_info sc_info;
     vk::UniqueSwapchainKHR swapchain;
+    std::vector<vk::UniqueImageView> swap_image_views;
+    vk::UniqueRenderPass render_pass;
+    vk::UniquePipeline pipeline;
 
     void create_instance();
     bool get_device_queue_families(vk::PhysicalDevice const & dev);
@@ -48,7 +51,12 @@ private:
     void get_surface();
     void pick_gpu();
     void create_device();
+    void create_image_view(vk::Format fmt, vk::ImageAspectFlags flags, vk::Image const & img,
+                           vk::UniqueImageView & view);
     void create_swapchain();
+    void create_render_pass();
+    void create_shader_module(std::vector<char> const & code, vk::UniqueShaderModule & mod);
+    void create_pipeline();
 
 public:
 

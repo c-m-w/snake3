@@ -145,6 +145,31 @@ void render::create_device()
     queue.get_queues(*dev);
 }
 
+void render::create_image_view(vk::Format fmt, vk::ImageAspectFlags flags, vk::Image const & img,
+                               vk::UniqueImageView & view)
+{
+    auto const range = vk::ImageSubresourceRange(
+        flags,
+        0,
+        0,
+        0,
+        1
+    );
+    auto const info = vk::ImageViewCreateInfo(
+        { },
+        img,
+        vk::ImageViewType::e2D,
+        fmt,
+        {vk::ComponentSwizzle::eIdentity,
+         vk::ComponentSwizzle::eIdentity,
+         vk::ComponentSwizzle::eIdentity,
+         vk::ComponentSwizzle::eIdentity},
+        range
+    );
+
+    view = dev->createImageViewUnique(info);
+}
+
 void render::create_swapchain()
 {
     sc_info = swap_info(gpu, *surface);
@@ -169,6 +194,92 @@ void render::create_swapchain()
     );
 
     swapchain = dev->createSwapchainKHRUnique(sc_create_info);
+
+    for (auto & img : dev->getSwapchainImagesKHR(*swapchain))
+        create_image_view(sc_info.image_format.format, vk::ImageAspectFlagBits::eColor,
+                          img, swap_image_views.emplace_back());
+}
+
+void render::create_render_pass()
+{
+    auto const color_attachment = vk::AttachmentDescription(
+        { },
+        sc_info.image_format.format,
+        vk::SampleCountFlagBits::e1,
+        vk::AttachmentLoadOp::eClear,
+        vk::AttachmentStoreOp::eStore,
+        vk::AttachmentLoadOp::eDontCare,
+        vk::AttachmentStoreOp::eDontCare,
+        vk::ImageLayout::eUndefined,
+        vk::ImageLayout::ePresentSrcKHR
+    );
+
+    auto const color_ref = vk::AttachmentReference(
+        0,
+        vk::ImageLayout::eColorAttachmentOptimal
+    );
+
+    auto const subpass = vk::SubpassDescription(
+        { },
+        vk::PipelineBindPoint::eGraphics,
+        0,
+        nullptr,
+        1,
+        &color_ref
+    );
+
+    auto const create_info = vk::RenderPassCreateInfo(
+        { },
+        1,
+        &color_attachment,
+        1,
+        &subpass
+    );
+
+    render_pass = dev->createRenderPassUnique(create_info);
+}
+
+void render::create_shader_module(std::vector<char> const & code, vk::UniqueShaderModule & mod)
+{
+    auto const info = vk::ShaderModuleCreateInfo(
+        { },
+        code.size(),
+        reinterpret_cast<std::uint32_t const *>(&code[0])
+    );
+
+    mod = dev->createShaderModuleUnique(info);
+}
+
+void render::create_pipeline()
+{
+    auto const vshader = utils::load_file("vert.spv");
+    auto const fshader = utils::load_file("frag.spv");
+
+    vk::UniqueShaderModule vertex, fragment;
+
+    create_shader_module(vshader, vertex);
+    create_shader_module(fshader, fragment);
+    
+    std::vector<vk::PipelineShaderStageCreateInfo> shader_stages {};
+
+    shader_stages.emplace_back(vk::PipelineShaderStageCreateInfo(
+        { },
+        vk::ShaderStageFlagBits::eVertex,
+        *vertex,
+        "main"
+    ));
+    shader_stages.emplace_back(vk::PipelineShaderStageCreateInfo(
+        { },
+        vk::ShaderStageFlagBits::eFragment,
+        *fragment,
+        "main"
+    ));
+
+    // auto const vert_info = vk::PipelineVertexInputStateCreateInfo(
+    //     { },
+    //     1,
+
+    // )s
 }
 
 render::render():
@@ -179,4 +290,6 @@ render::render():
     pick_gpu();
     create_device();
     create_swapchain();
+    create_render_pass();
+    create_pipeline();
 }

@@ -4,7 +4,10 @@ project(snake3 VERSION 0.1.0 LANGUAGES C CXX)
 include(CTest)
 enable_testing()
 
+include_directories(deps)
+
 add_executable(snake3 src/snake3.cpp
+                      src/helpers/settings.cpp
                       src/drawing/window.cpp
                       src/drawing/render/queue_families.cpp
                       src/drawing/render/swap_info.cpp

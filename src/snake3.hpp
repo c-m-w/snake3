@@ -16,11 +16,11 @@
 
 /**************************************************
  *
- *				       vulkan
+ *				       json
  *
  **************************************************/
 
-#include <vulkan/vulkan.hpp>
+#include <json/single_include/nlohmann/json.hpp>
 
 /**************************************************
  *
@@ -31,6 +31,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <fstream>
 #include <map>
 #include <queue>
 #include <optional>
@@ -38,6 +39,14 @@
 #include <iostream>
 #include <set>
 #include <vector>
+
+/**************************************************
+ *
+ *				       vulkan
+ *
+ **************************************************/
+
+#include <vulkan/vulkan.hpp>
 
 /**************************************************
  *
@@ -54,4 +63,5 @@
 #include "drawing/window.hpp"
 #include "drawing/render/queue_families.hpp"
 #include "drawing/render/swap_info.hpp"
+#include "drawing/render/vertex.hpp"
 #include "drawing/render/render.hpp"

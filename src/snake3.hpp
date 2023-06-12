@@ -52,4 +52,6 @@
 #include "helpers/settings.hpp"
 
 #include "drawing/window.hpp"
+#include "drawing/render/queue_families.hpp"
+#include "drawing/render/swap_info.hpp"
 #include "drawing/render/render.hpp"

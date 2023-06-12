@@ -145,6 +145,32 @@ void render::create_device()
     queue.get_queues(*dev);
 }
 
+void render::create_swapchain()
+{
+    sc_info = swap_info(gpu, *surface);
+    
+    std::uint32_t const indices[ ] = {queues[gpu].indices[QUEUE_FAMILY_GRAPHICS].value(),
+                                      queues[gpu].indices[QUEUE_FAMILY_PRESENT].value()};
+    auto const sc_create_info = vk::SwapchainCreateInfoKHR(
+        vk::SwapchainCreateFlagsKHR(),
+        *surface,
+        sc_info.image_count,
+        sc_info.image_format.format,
+        sc_info.image_format.colorSpace,
+        sc_info.extent,
+        1,
+        vk::ImageUsageFlagBits::eColorAttachment,
+        vk::SharingMode::eConcurrent,
+        2,
+        indices,
+        sc_info.capabilities.currentTransform,
+        vk::CompositeAlphaFlagBitsKHR::eOpaque,
+        sc_info.present_mode
+    );
+
+    swapchain = dev->createSwapchainKHRUnique(sc_create_info);
+}
+
 render::render():
     loggable(__func__)
 {
@@ -152,4 +178,5 @@ render::render():
     get_surface();
     pick_gpu();
     create_device();
+    create_swapchain();
 }

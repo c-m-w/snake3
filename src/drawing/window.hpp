@@ -19,8 +19,9 @@ public:
     ~window();
 
     bool poll();
+    void get_size(std::uint32_t & width, std::uint32_t & height);
 
-    operator GLFWwindow * () const;
+    operator GLFWwindow *() const;
 
     friend class render;
 };

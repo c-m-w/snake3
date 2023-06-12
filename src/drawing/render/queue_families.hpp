@@ -1,5 +1,7 @@
 /// queue_family.hpp
 
+#pragma once
+
 enum
 {
     QUEUE_FAMILY_GRAPHICS,

@@ -2,8 +2,6 @@
 
 #pragma once
 
-#include "queue_families.hpp"
-
 namespace std
 {
     template<>
@@ -41,6 +39,8 @@ private:
     vk::UniqueSurfaceKHR surface;
     queue_family_map_t queues;
     vk::UniqueDevice dev;
+    swap_info sc_info;
+    vk::UniqueSwapchainKHR swapchain;
 
     void create_instance();
     bool get_device_queue_families(vk::PhysicalDevice const & dev);
@@ -48,6 +48,7 @@ private:
     void get_surface();
     void pick_gpu();
     void create_device();
+    void create_swapchain();
 
 public:
 

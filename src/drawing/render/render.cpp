@@ -46,9 +46,9 @@ std::size_t render::get_device_score(vk::PhysicalDevice const & dev)
 {
     std::size_t score = 0u;
 
-    queue_families.insert_or_assign(dev, queue_family(dev, surface));
+    queues.insert_or_assign(dev, queue_family(dev, *surface));
 
-    if (!queue_families[dev])
+    if (!queues[dev])
         return score;
 
     auto const props = dev.getProperties();
@@ -74,6 +74,16 @@ std::size_t render::get_device_score(vk::PhysicalDevice const & dev)
     return score;
 }
 
+void render::get_surface()
+{
+    VkSurfaceKHR tmp;
+
+    if (VK_SUCCESS != glfwCreateWindowSurface(*inst, *window::get(), nullptr, &tmp))
+        runtime_error("unable to create surface.");
+    
+    surface = vk::UniqueSurfaceKHR(tmp, *inst);
+}
+
 void render::pick_gpu()
 {
     std::priority_queue<device_score_t> devices;
@@ -92,14 +102,47 @@ void render::pick_gpu()
     gpu = dev;
 }
 
-void render::get_surface()
+void render::create_device()
 {
-    VkSurfaceKHR tmp;
+    auto & queue = queues[gpu];
 
-    if (VK_SUCCESS != glfwCreateWindowSurface(*inst, *window::get(), nullptr, &tmp))
-        runtime_error("unable to create surface.");
+    std::vector<vk::DeviceQueueCreateInfo> queues_to_create {};
+    std::set<std::uint32_t> added_queues {};
+
+    for (auto const index : queue.indices)
+    {
+        if (added_queues.find(index.value()) != added_queues.end())
+            continue;
+        
+        queues_to_create.emplace_back(
+            vk::DeviceQueueCreateInfo(
+                { },
+                index.value(),
+                1
+            )
+        );
+        added_queues.insert(index.value());
+    }
+
+    auto dev_features = vk::PhysicalDeviceFeatures();
+    auto dev_create_info = vk::DeviceCreateInfo(
+        { },
+        queues_to_create.size(),
+        &queues_to_create[0],
+#if defined (NDEBUG)
+        0,
+        nullptr,
+#else
+        VALIDATION_LAYERS.size(),
+        &VALIDATION_LAYERS[0],
+#endif
+        DEVICE_EXTENSIONS.size(),
+        &DEVICE_EXTENSIONS[0],
+        &dev_features
+    );
     
-    surface = vk::UniqueSurfaceKHR(tmp, *inst);
+    dev = gpu.createDeviceUnique(dev_create_info);
+    queue.get_queues(*dev);
 }
 
 render::render():
@@ -108,4 +151,5 @@ render::render():
     create_instance();
     get_surface();
     pick_gpu();
+    create_device();
 }

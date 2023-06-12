@@ -17,10 +17,12 @@ private:
 public:
 
     queue_family();
-    queue_family(vk::PhysicalDevice const & gpu, vk::UniqueSurfaceKHR const & surface);
+    queue_family(vk::PhysicalDevice const & gpu, vk::SurfaceKHR const & surface);
 
     void get_queues(vk::Device const & dev);
 
     operator bool( ) const;
     vk::Queue operator[](unsigned u) const;
+
+    friend class render;
 };

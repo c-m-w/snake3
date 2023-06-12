@@ -6,7 +6,7 @@ queue_family::queue_family():
     loggable(__func__)
 { }
 
-queue_family::queue_family(vk::PhysicalDevice const & gpu, vk::UniqueSurfaceKHR const & surface):
+queue_family::queue_family(vk::PhysicalDevice const & gpu, vk::SurfaceKHR const & surface):
     loggable(__func__)
 {
     auto const & families = gpu.getQueueFamilyProperties();
@@ -19,7 +19,7 @@ queue_family::queue_family(vk::PhysicalDevice const & gpu, vk::UniqueSurfaceKHR 
             && (family.queueFlags & vk::QueueFlagBits::eCompute))
             indices[QUEUE_FAMILY_GRAPHICS] = u;
         
-        if (VK_FALSE != gpu.getSurfaceSupportKHR(u, *surface))
+        if (VK_FALSE != gpu.getSurfaceSupportKHR(u, surface))
             indices[QUEUE_FAMILY_PRESENT] = u;
     }
 }

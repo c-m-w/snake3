@@ -6,7 +6,8 @@ enable_testing()
 
 add_executable(snake3 src/snake3.cpp
                       src/drawing/window.cpp
-                      src/drawing/render.cpp)
+                      src/drawing/render/queue_families.cpp
+                      src/drawing/render/render.cpp)
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})

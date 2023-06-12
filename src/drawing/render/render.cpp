@@ -1,6 +1,6 @@
 /// render.cpp
 
-#include "../snake3.hpp"
+#include "../../snake3.hpp"
 
 using device_score_t = std::pair<vk::PhysicalDevice, std::size_t>;
 
@@ -46,6 +46,11 @@ std::size_t render::get_device_score(vk::PhysicalDevice const & dev)
 {
     std::size_t score = 0u;
 
+    queue_families.insert_or_assign(dev, queue_family(dev, surface));
+
+    if (!queue_families[dev])
+        return score;
+
     auto const props = dev.getProperties();
 
     switch (props.deviceType)
@@ -81,8 +86,8 @@ void render::pick_gpu()
 
     auto const [dev, score] = devices.top();
 
-    if (0 == score)
-        runtime_error("no suitable physical device.");
+    if (score == 0)
+        runtime_error("no usable physical device.");
 
     gpu = dev;
 }

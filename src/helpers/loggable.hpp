@@ -15,7 +15,7 @@ protected:
         where(where)
     { }
 
-    inline void runtime_error(std::string const & what)
+    inline void runtime_error(std::string const & what) const
     {
         std::cerr << "\033[31;5;1m[" << where << "::error" 
                   << "]\033[0;37;1m " << what << "\033[0m" << std::endl;

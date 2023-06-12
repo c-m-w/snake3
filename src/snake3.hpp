@@ -32,6 +32,7 @@
 #include <array>
 #include <chrono>
 #include <queue>
+#include <optional>
 #include <thread>
 #include <iostream>
 #include <vector>
@@ -49,4 +50,4 @@
 #include "helpers/settings.hpp"
 
 #include "drawing/window.hpp"
-#include "drawing/render.hpp"
+#include "drawing/render/render.hpp"

@@ -275,11 +275,112 @@ void render::create_pipeline()
         "main"
     ));
 
-    // auto const vert_info = vk::PipelineVertexInputStateCreateInfo(
-    //     { },
-    //     1,
+    auto const binding_desc = vertex::get_binding_description();
+    auto const attribute_desc = vertex::get_attribute_descriptions();
 
-    // )s
+    auto const vert_info = vk::PipelineVertexInputStateCreateInfo(
+        { },
+        1,
+        &binding_desc,
+        attribute_desc.size(),
+        attribute_desc.data()
+    );
+
+    auto const input_info = vk::PipelineInputAssemblyStateCreateInfo(
+        { },
+        vk::PrimitiveTopology::eTriangleList
+    );
+
+    auto const viewport_info = vk::PipelineViewportStateCreateInfo(
+        { },
+        1,
+        nullptr,
+        1,
+        nullptr
+    );
+
+    std::vector< vk::DynamicState > const dynamic_states {
+        vk::DynamicState::eViewport,
+        vk::DynamicState::eScissor
+    };
+
+    auto const dynamic_state_info = vk::PipelineDynamicStateCreateInfo(
+        { },
+        dynamic_states.size(),
+        dynamic_states.data()
+    );
+
+    auto const rast_info = vk::PipelineRasterizationStateCreateInfo();
+    auto const blend_attachment = vk::PipelineColorBlendAttachmentState();
+    auto const blend_info = vk::PipelineColorBlendStateCreateInfo(
+        { },
+        VK_FALSE,
+        vk::LogicOp::eCopy,
+        1,
+        &blend_attachment
+    );
+
+    auto const pipe_layout_info = vk::PipelineLayoutCreateInfo();
+
+    pipe_layout = dev->createPipelineLayoutUnique(pipe_layout_info);
+
+    auto const pipe_info = vk::GraphicsPipelineCreateInfo(
+        { },
+        shader_stages.size(),
+        shader_stages.data(),
+        &vert_info,
+        &input_info,
+        nullptr,
+        &viewport_info,
+        &rast_info,
+        nullptr,
+        nullptr,
+        &blend_info,
+        &dynamic_state_info,
+        *pipe_layout,
+        *render_pass
+    );
+
+    if (auto && result = dev->createGraphicsPipelineUnique(nullptr, pipe_info);
+        result.result != vk::Result::eSuccess)
+        runtime_error("failed to make pipeline.");
+    else
+        pipeline = std::move(result.value);
+}
+
+void render::create_commands()
+{
+    auto const pool_info = vk::CommandPoolCreateInfo(
+        vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+        queues[gpu].index_of(QUEUE_FAMILY_GRAPHICS)
+    );
+
+    cmd_pool = dev->createCommandPoolUnique(pool_info);
+
+    auto const cmd_info = vk::CommandBufferAllocateInfo(
+        *cmd_pool,
+        vk::CommandBufferLevel::ePrimary,
+        NFRAMEBUFFERS
+    );
+
+    cmd = dev->allocateCommandBuffersUnique(cmd_info);
+}
+
+void render::create_framebuffers()
+{
+    for (auto & image_view: swap_image_views)
+    {
+        auto const framebuffer_info = vk::FramebufferCreateInfo(
+            { },
+            *render_pass,
+            1,
+            &*image_view,
+            sc_info.extent.width,
+            sc_info.extent.height
+        );
+
+        swap_framebuffers.emplace_back(dev->createFramebufferUnique(framebuffer_info));
+    }
 }
 
 render::render():
@@ -292,4 +393,6 @@ render::render():
     create_swapchain();
     create_render_pass();
     create_pipeline();
+    create_commands();
+    create_framebuffers();
 }

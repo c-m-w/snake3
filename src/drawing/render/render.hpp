@@ -34,6 +34,8 @@ private:
 
     using queue_family_map_t = std::unordered_map<vk::PhysicalDevice, queue_family>;
 
+    constexpr static auto NFRAMEBUFFERS = 2;
+
     vk::UniqueInstance inst;
     vk::PhysicalDevice gpu;
     vk::UniqueSurfaceKHR surface;
@@ -42,8 +44,12 @@ private:
     swap_info sc_info;
     vk::UniqueSwapchainKHR swapchain;
     std::vector<vk::UniqueImageView> swap_image_views;
+    std::vector<vk::UniqueFramebuffer> swap_framebuffers;
     vk::UniqueRenderPass render_pass;
+    vk::UniquePipelineLayout pipe_layout;
     vk::UniquePipeline pipeline;
+    vk::UniqueCommandPool cmd_pool;
+    std::vector<vk::UniqueCommandBuffer> cmd;
 
     void create_instance();
     bool get_device_queue_families(vk::PhysicalDevice const & dev);
@@ -57,6 +63,8 @@ private:
     void create_render_pass();
     void create_shader_module(std::vector<char> const & code, vk::UniqueShaderModule & mod);
     void create_pipeline();
+    void create_commands();
+    void create_framebuffers();
 
 public:
 

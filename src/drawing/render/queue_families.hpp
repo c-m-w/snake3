@@ -23,6 +23,8 @@ public:
 
     void get_queues(vk::Device const & dev);
 
+    std::uint32_t index_of(unsigned u) const;
+
     operator bool( ) const;
     vk::Queue operator[](unsigned u) const;
 

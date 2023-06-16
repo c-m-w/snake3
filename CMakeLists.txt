@@ -11,6 +11,7 @@ add_executable(snake3 src/snake3.cpp
                       src/drawing/window.cpp
                       src/drawing/render/queue_families.cpp
                       src/drawing/render/swap_info.cpp
+                      src/drawing/render/vertex.cpp
                       src/drawing/render/render.cpp)
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})

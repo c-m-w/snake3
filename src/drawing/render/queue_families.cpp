@@ -35,6 +35,14 @@ void queue_family::get_queues(vk::Device const & dev)
     }
 }
 
+std::uint32_t queue_family::index_of(unsigned u) const
+{
+    if (!indices[u].has_value())
+        runtime_error("attempt to access unfound queue index " + std::to_string(u) + ".");
+
+    return indices[u].value();
+}
+
 queue_family::operator bool( ) const
 {
     auto valid = true;

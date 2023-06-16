@@ -12,3 +12,6 @@ snake3
 
 # vscode
 .vscode/
+
+# shaders
+*.spv

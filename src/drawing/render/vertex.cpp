@@ -29,10 +29,10 @@ vertex::get_attribute_descriptions( )
     );
 
     desc[1] = vk::VertexInputAttributeDescription(
-        0,
         1,
+        0,
         vk::Format::eR32G32B32A32Sfloat,
-        offsetof(vertex, pos)
+        offsetof(vertex, col)
     );
 
     return desc;

@@ -18,6 +18,66 @@ namespace std
     };
 }
 
+void render::create_image_view(vk::Format fmt, vk::ImageAspectFlags flags, vk::Image const & img,
+                               vk::UniqueImageView & view)
+{
+    auto const range = vk::ImageSubresourceRange(
+        flags,
+        0,
+        1,
+        0,
+        1
+    );
+    auto const info = vk::ImageViewCreateInfo(
+        { },
+        img,
+        vk::ImageViewType::e2D,
+        fmt,
+        {vk::ComponentSwizzle::eIdentity,
+         vk::ComponentSwizzle::eIdentity,
+         vk::ComponentSwizzle::eIdentity,
+         vk::ComponentSwizzle::eIdentity},
+        range
+    );
+
+    view = dev->createImageViewUnique(info);
+}
+
+std::uint32_t render::mem_index(std::uint32_t type, vk::MemoryPropertyFlags flags)
+{
+    auto const props = gpu.getMemoryProperties();
+
+    for (auto u = 0u; u < props.memoryTypeCount; u++)
+        if (type & (1 << u) && props.memoryTypes[u].propertyFlags & flags)
+            return u;
+    
+    runtime_error("unable to find memory index requested.");
+    return 0;
+}
+
+void render::create_buffer(vk::DeviceSize size, vk::BufferUsageFlags usage,
+                           vk::MemoryPropertyFlags flags, vk::UniqueBuffer & buf,
+                           vk::UniqueDeviceMemory & mem)
+{
+    auto const info = vk::BufferCreateInfo(
+        { },
+        size,
+        usage,
+        vk::SharingMode::eExclusive
+    );
+
+    buf = dev->createBufferUnique(info);
+
+    auto const req = dev->getBufferMemoryRequirements(*buf);
+    auto const mem_info = vk::MemoryAllocateInfo(
+        req.size,
+        mem_index(req.memoryTypeBits, flags)
+    );
+
+    mem = dev->allocateMemoryUnique(mem_info);
+    dev->bindBufferMemory(*buf, *mem, 0);
+}
+
 void render::create_instance()
 {
     vk::ApplicationInfo app_info(
@@ -30,11 +90,16 @@ void render::create_instance()
 
     auto const [glfw_extensions, n_glfw_extensions] = window::get()->get_extensions();
 
-    vk::InstanceCreateInfo create_info(
-        vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR,
+    auto const create_info = vk::InstanceCreateInfo(
+        {},
         &app_info,
+#if defined (NDEBUG)
         0,
-        nullptr,
+        nullptr
+#else
+        VALIDATION_LAYERS.size(),
+        VALIDATION_LAYERS.data(),
+#endif
         n_glfw_extensions,
         glfw_extensions
     );
@@ -107,6 +172,7 @@ void render::create_device()
     auto & queue = queues[gpu];
 
     std::vector<vk::DeviceQueueCreateInfo> queues_to_create {};
+	auto const priority = 1.f;
     std::set<std::uint32_t> added_queues {};
 
     for (auto const index : queue.indices)
@@ -118,7 +184,8 @@ void render::create_device()
             vk::DeviceQueueCreateInfo(
                 { },
                 index.value(),
-                1
+                1,
+                &priority
             )
         );
         added_queues.insert(index.value());
@@ -131,43 +198,18 @@ void render::create_device()
         &queues_to_create[0],
 #if defined (NDEBUG)
         0,
-        nullptr,
+        nullptr
 #else
         VALIDATION_LAYERS.size(),
-        &VALIDATION_LAYERS[0],
+        VALIDATION_LAYERS.data(),
 #endif
         DEVICE_EXTENSIONS.size(),
-        &DEVICE_EXTENSIONS[0],
+        DEVICE_EXTENSIONS.data(),
         &dev_features
     );
     
     dev = gpu.createDeviceUnique(dev_create_info);
     queue.get_queues(*dev);
-}
-
-void render::create_image_view(vk::Format fmt, vk::ImageAspectFlags flags, vk::Image const & img,
-                               vk::UniqueImageView & view)
-{
-    auto const range = vk::ImageSubresourceRange(
-        flags,
-        0,
-        0,
-        0,
-        1
-    );
-    auto const info = vk::ImageViewCreateInfo(
-        { },
-        img,
-        vk::ImageViewType::e2D,
-        fmt,
-        {vk::ComponentSwizzle::eIdentity,
-         vk::ComponentSwizzle::eIdentity,
-         vk::ComponentSwizzle::eIdentity,
-         vk::ComponentSwizzle::eIdentity},
-        range
-    );
-
-    view = dev->createImageViewUnique(info);
 }
 
 void render::create_swapchain()
@@ -176,7 +218,7 @@ void render::create_swapchain()
     
     std::uint32_t const indices[ ] = {queues[gpu].indices[QUEUE_FAMILY_GRAPHICS].value(),
                                       queues[gpu].indices[QUEUE_FAMILY_PRESENT].value()};
-    auto const sc_create_info = vk::SwapchainCreateInfoKHR(
+    auto sc_create_info = vk::SwapchainCreateInfoKHR(
         vk::SwapchainCreateFlagsKHR(),
         *surface,
         sc_info.image_count,
@@ -185,13 +227,20 @@ void render::create_swapchain()
         sc_info.extent,
         1,
         vk::ImageUsageFlagBits::eColorAttachment,
-        vk::SharingMode::eConcurrent,
-        2,
-        indices,
+        vk::SharingMode::eExclusive,
+        0,
+        nullptr,
         sc_info.capabilities.currentTransform,
         vk::CompositeAlphaFlagBitsKHR::eOpaque,
         sc_info.present_mode
     );
+
+    if (indices[0] != indices[1])
+    {
+        sc_create_info.imageSharingMode = vk::SharingMode::eConcurrent;
+		sc_create_info.queueFamilyIndexCount = 2;
+		sc_create_info.pQueueFamilyIndices = indices;
+    }
 
     swapchain = dev->createSwapchainKHRUnique(sc_create_info);
 
@@ -250,10 +299,80 @@ void render::create_shader_module(std::vector<char> const & code, vk::UniqueShad
     mod = dev->createShaderModuleUnique(info);
 }
 
+void render::create_buffers()
+{
+    create_buffer(
+        sizeof(ubo_t),
+        vk::BufferUsageFlagBits::eUniformBuffer,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+        ubo_buf,
+        ubo_mem
+    );
+}
+
+void render::create_buffer_descriptors()
+{
+    std::array<vk::DescriptorPoolSize, 1> pools
+    {
+        vk::DescriptorPoolSize(vk::DescriptorType::eUniformBuffer, 1)
+    };
+
+    auto const pool_info = vk::DescriptorPoolCreateInfo(
+        { },
+        1,
+        pools.size(),
+        pools.data()
+    );
+
+    desc_pool = dev->createDescriptorPoolUnique(pool_info);
+
+    auto const desc_layouts = std::vector<vk::DescriptorSetLayoutBinding>
+    {
+        ubo_t::layout_binding()
+    };
+
+    auto const desc_layout_info = vk::DescriptorSetLayoutCreateInfo(
+        { },
+        desc_layouts.size(),
+        desc_layouts.data()
+    );
+
+    desc_layout = dev->createDescriptorSetLayoutUnique(desc_layout_info);
+
+    auto const desc_allocate_info = vk::DescriptorSetAllocateInfo(
+        *desc_pool,
+        1,
+        &*desc_layout
+    );
+
+    desc = std::move(dev->allocateDescriptorSetsUnique(desc_allocate_info)[0]);
+
+    auto const ubo_info = vk::DescriptorBufferInfo(
+        *ubo_buf,
+        0,
+        sizeof(ubo_t)
+    );
+
+    std::array<vk::WriteDescriptorSet, 1> writes
+    {
+        vk::WriteDescriptorSet(
+            *desc,
+            0,
+            0,
+            1,
+            vk::DescriptorType::eUniformBuffer,
+            nullptr,
+            &ubo_info
+        )
+    };
+
+    dev->updateDescriptorSets(writes.size(), writes.data(), 0, nullptr);
+}
+
 void render::create_pipeline()
 {
-    auto const vshader = utils::load_file("vert.spv");
-    auto const fshader = utils::load_file("frag.spv");
+    auto const vshader = utils::load_file("/home/cole/snake3/vert.spv");
+    auto const fshader = utils::load_file("/home/cole/snake3/frag.spv");
 
     vk::UniqueShaderModule vertex, fragment;
 
@@ -310,7 +429,20 @@ void render::create_pipeline()
         dynamic_states.data()
     );
 
-    auto const rast_info = vk::PipelineRasterizationStateCreateInfo();
+    auto const rast_info = vk::PipelineRasterizationStateCreateInfo(
+        {},
+        false,
+        false,
+        vk::PolygonMode::eFill,
+        vk::CullModeFlagBits::eFront,
+        vk::FrontFace::eCounterClockwise,
+        false,
+        0.f,
+        0.f,
+        0.f,
+        1.f
+    );
+    auto const multisample_info = vk::PipelineMultisampleStateCreateInfo();
     auto const blend_attachment = vk::PipelineColorBlendAttachmentState();
     auto const blend_info = vk::PipelineColorBlendStateCreateInfo(
         { },
@@ -320,7 +452,13 @@ void render::create_pipeline()
         &blend_attachment
     );
 
-    auto const pipe_layout_info = vk::PipelineLayoutCreateInfo();
+    auto const pipe_layout_info = vk::PipelineLayoutCreateInfo(
+        { },
+        1,
+        &*desc_layout,
+        0,
+        nullptr
+    );
 
     pipe_layout = dev->createPipelineLayoutUnique(pipe_layout_info);
 
@@ -333,7 +471,7 @@ void render::create_pipeline()
         nullptr,
         &viewport_info,
         &rast_info,
-        nullptr,
+        &multisample_info,
         nullptr,
         &blend_info,
         &dynamic_state_info,
@@ -376,11 +514,91 @@ void render::create_framebuffers()
             1,
             &*image_view,
             sc_info.extent.width,
-            sc_info.extent.height
+            sc_info.extent.height,
+            1
         );
 
         swap_framebuffers.emplace_back(dev->createFramebufferUnique(framebuffer_info));
     }
+}
+
+void render::create_sync_objects()
+{
+    auto const f_info = vk::FenceCreateInfo(vk::FenceCreateFlagBits::eSignaled);
+    auto const s_info = vk::SemaphoreCreateInfo();
+
+    f_rendering = dev->createFenceUnique(f_info);
+    s_image_acquired = dev->createSemaphoreUnique(s_info);
+    s_render_finished = dev->createSemaphoreUnique(s_info);
+}
+
+void render::begin_frame(std::size_t const img)
+{
+    if (vk::Result::eSuccess != dev->resetFences(1, &*f_rendering))
+        runtime_error("failed to reset fence.");
+
+    cmd[frame]->reset();
+
+    auto begin_info = vk::CommandBufferBeginInfo();
+
+    if (vk::Result::eSuccess != cmd[frame]->begin(&begin_info))
+        runtime_error("failed to begin new command.");
+
+    auto const viewport = vk::Viewport(
+        0.f,
+        0.f,
+        static_cast<float>(sc_info.extent.width),
+        static_cast<float>(sc_info.extent.height),
+        0.f,
+        1.f
+    );
+    auto const scissor = vk::Rect2D(
+        {},
+        sc_info.extent
+    );
+	std::vector< vk::ClearValue > clear_colors 
+	{ 
+		vk::ClearValue(
+            vk::ClearColorValue(
+                1.f, 1.f, 1.f, 1.f
+            )
+        )
+	};
+    auto const pass_info = vk::RenderPassBeginInfo(
+        *render_pass,
+        *swap_framebuffers[img],
+        scissor,
+        clear_colors.size(),
+        clear_colors.data()
+    );
+
+    cmd[frame]->beginRenderPass(pass_info, vk::SubpassContents::eInline);
+    cmd[frame]->setViewport(0, 1, &viewport);
+    cmd[frame]->setScissor(0, 1, &scissor);
+    cmd[frame]->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipe_layout, 0, 1, &*desc, 0, nullptr);
+}
+
+void render::end_frame()
+{
+    cmd[frame]->endRenderPass();
+    cmd[frame]->end();
+
+    auto const wait_stages = std::vector<vk::PipelineStageFlags>
+    {
+        vk::PipelineStageFlagBits::eColorAttachmentOutput
+    };
+    auto const submit_info = vk::SubmitInfo(
+        1,
+        &*s_image_acquired,
+        wait_stages.data(),
+        1,
+        &*cmd[frame],
+        1,
+        &*s_render_finished
+    );
+
+    if (vk::Result::eSuccess != queues[gpu][QUEUE_FAMILY_GRAPHICS].submit(1, &submit_info, *f_rendering))
+        runtime_error("failed to submit render commands.");
 }
 
 render::render():
@@ -392,7 +610,48 @@ render::render():
     create_device();
     create_swapchain();
     create_render_pass();
+    create_buffers();
+    create_buffer_descriptors();
     create_pipeline();
     create_commands();
     create_framebuffers();
+    create_sync_objects();
+}
+
+void render::draw_frame()
+{
+    if (vk::Result::eSuccess != dev->waitForFences(1, &*f_rendering, true, std::numeric_limits<std::uint64_t>::max()))
+        runtime_error("failed to wait for next frame.");
+
+    auto img = 0u;
+
+    if (auto const res = dev->acquireNextImageKHR(*swapchain, 
+                                                  std::numeric_limits<std::uint64_t>::max(),
+                                                  *s_image_acquired,
+                                                  nullptr,
+                                                  &img);
+        res == vk::Result::eErrorOutOfDateKHR)
+        return void();
+    else if (res != vk::Result::eSuccess && res != vk::Result::eSuboptimalKHR)
+        runtime_error("failed to acquire next image.");
+
+    begin_frame(img);
+    end_frame();
+
+    auto const present_info = vk::PresentInfoKHR(
+        1,
+        &*s_render_finished,
+        1,
+        &*swapchain,
+        &img
+    );
+
+    if (auto const res = queues[gpu][QUEUE_FAMILY_PRESENT].presentKHR(present_info);
+        res == vk::Result::eErrorOutOfDateKHR
+        || res == vk::Result::eSuboptimalKHR)
+        runtime_error("failed to present image.");
+    else if (res != vk::Result::eSuccess)
+        runtime_error("failed to present image.");
+
+    frame = (frame + 1) % NFRAMEBUFFERS;
 }

@@ -64,4 +64,5 @@
 #include "drawing/render/queue_families.hpp"
 #include "drawing/render/swap_info.hpp"
 #include "drawing/render/vertex.hpp"
+#include "drawing/render/uniform_buffer.hpp"
 #include "drawing/render/render.hpp"

@@ -13,6 +13,9 @@ namespace utils
     {
         std::ifstream f(file_name, std::ios::ate | std::ios::binary);
 
+        if (!f.good())
+            return {};
+
         auto const size = static_cast<std::size_t>(f.tellg());
         std::vector<char> buffer(size);
 

@@ -7,5 +7,8 @@ int main(int, char**)
     settings::get()->load<int>("test", 0);
 
     render::get();
-    while (window::get()->poll());
+    while (window::get()->poll())
+    {
+        render::get()->draw_frame();
+    }
 }

@@ -19,8 +19,7 @@ vec3 colors[3] = vec3[](
 
 void main( )
 {
-    gl_Position = vec4(positions[gl_VertexIndex], 0.0, 1.0);
-    out_color = vec4(colors[gl_VertexIndex], 1.0);
-    gl_PointSize = 40;
-    gl_Position = vec4(0,0,0,0);
+    gl_Position = vec4(position, 1.0);
+    out_color = color;
+    gl_PointSize=50;
 }

@@ -414,7 +414,8 @@ void render::create_pipeline()
 
     auto const input_info = vk::PipelineInputAssemblyStateCreateInfo(
         { },
-        vk::PrimitiveTopology::eTriangleList
+        vk::PrimitiveTopology::eTriangleList,
+        false
     );
 
     auto const viewport_info = vk::PipelineViewportStateCreateInfo(
@@ -441,7 +442,7 @@ void render::create_pipeline()
         false,
         false,
         vk::PolygonMode::eFill,
-        vk::CullModeFlagBits::eFrontAndBack,
+        vk::CullModeFlagBits::eNone,
         vk::FrontFace::eCounterClockwise,
         false,
         0.f,
@@ -451,12 +452,7 @@ void render::create_pipeline()
     );
     auto const multisample_info = vk::PipelineMultisampleStateCreateInfo(
         { },
-        vk::SampleCountFlagBits::e1,
-        false,
-        1.f,
-        nullptr,
-        false,
-        false
+        vk::SampleCountFlagBits::e1
     );
     auto const blend_attachment = vk::PipelineColorBlendAttachmentState(
         false,
@@ -610,7 +606,7 @@ void render::make_vb()
 {
     static std::array<vertex, 4> vertices 
     {
-        vertex({-0.5f, -0.5f, 0.f}, {0.f, 1.f, 0.f, 1.f}),
+        vertex({-0.5f, -.5f, 0.f}, {0.f, 1.f, 0.f, 1.f}),
         vertex({0.5f, -0.5f, 0.f}, {1.f, 0.f, 0.f, 1.f}),
         vertex({0.5f, 0.5f, 0.f}, {0.f, 0.f, 1.f, 1.f}),
         vertex({-0.5f, 0.5f, 0.f}, {1.f, 1.f, 1.f, 1.f})
@@ -776,9 +772,6 @@ void render::draw_frame()
         cmd[frame]->bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline);
         cmd[frame]->bindVertexBuffers(0, 1, &*vb, &offset);
         cmd[frame]->bindIndexBuffer(*ib, 0, vk::IndexType::eUint16);
-        cmd[frame]->drawIndexed(6, 1, 0, 0, 0);
-        cmd[frame]->drawIndexed(6, 1, 0, 0, 0);
-        cmd[frame]->drawIndexed(6, 1, 0, 0, 0);
         cmd[frame]->drawIndexed(6, 1, 0, 0, 0);
     }
     end_frame();

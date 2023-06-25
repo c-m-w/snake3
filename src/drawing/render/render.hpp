@@ -62,6 +62,11 @@ private:
     vk::UniqueDeviceMemory ubo_mem;
     vk::UniqueBuffer ubo_buf;
 
+    vk::UniqueDeviceMemory vm;
+    vk::UniqueBuffer vb;
+    vk::UniqueDeviceMemory im;
+    vk::UniqueBuffer ib;
+
     std::size_t frame = 0;
 
     void create_image_view(vk::Format fmt, vk::ImageAspectFlags flags, vk::Image const & img,
@@ -87,12 +92,19 @@ private:
     void create_framebuffers();
     void create_sync_objects();
 
+    vk::CommandBuffer begin_single_commands();
+    void end_single_commands(vk::CommandBuffer cmd);
+    void copy_buffer(vk::Buffer src, vk::Buffer dst, vk::DeviceSize size);
+
+    void make_vb();
+
     void begin_frame(std::size_t const img);
     void end_frame();
 
 public:
 
     render();
+    ~render();
 
     void draw_frame();
 

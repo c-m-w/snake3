@@ -262,12 +262,10 @@ void render::create_render_pass()
         vk::ImageLayout::eUndefined,
         vk::ImageLayout::ePresentSrcKHR
     );
-
     auto const color_ref = vk::AttachmentReference(
         0,
         vk::ImageLayout::eColorAttachmentOptimal
     );
-
     auto const subpass = vk::SubpassDescription(
         { },
         vk::PipelineBindPoint::eGraphics,
@@ -276,13 +274,22 @@ void render::create_render_pass()
         1,
         &color_ref
     );
-
+    auto const dependency = vk::SubpassDependency(
+        VK_SUBPASS_EXTERNAL,
+        0,
+        vk::PipelineStageFlagBits::eColorAttachmentOutput,
+        vk::PipelineStageFlagBits::eColorAttachmentOutput,
+        vk::AccessFlagBits::eNone,
+        vk::AccessFlagBits::eColorAttachmentWrite
+    );
     auto const create_info = vk::RenderPassCreateInfo(
         { },
         1,
         &color_attachment,
         1,
-        &subpass
+        &subpass,
+        1,
+        &dependency
     );
 
     render_pass = dev->createRenderPassUnique(create_info);
@@ -318,7 +325,7 @@ void render::create_buffer_descriptors()
     };
 
     auto const pool_info = vk::DescriptorPoolCreateInfo(
-        { },
+        vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
         1,
         pools.size(),
         pools.data()
@@ -434,7 +441,7 @@ void render::create_pipeline()
         false,
         false,
         vk::PolygonMode::eFill,
-        vk::CullModeFlagBits::eFront,
+        vk::CullModeFlagBits::eFrontAndBack,
         vk::FrontFace::eCounterClockwise,
         false,
         0.f,
@@ -442,8 +449,28 @@ void render::create_pipeline()
         0.f,
         1.f
     );
-    auto const multisample_info = vk::PipelineMultisampleStateCreateInfo();
-    auto const blend_attachment = vk::PipelineColorBlendAttachmentState();
+    auto const multisample_info = vk::PipelineMultisampleStateCreateInfo(
+        { },
+        vk::SampleCountFlagBits::e1,
+        false,
+        1.f,
+        nullptr,
+        false,
+        false
+    );
+    auto const blend_attachment = vk::PipelineColorBlendAttachmentState(
+        false,
+        vk::BlendFactor::eSrcAlpha,
+        vk::BlendFactor::eOneMinusSrcAlpha,
+        vk::BlendOp::eAdd,
+        vk::BlendFactor::eOne,
+        vk::BlendFactor::eZero,
+        vk::BlendOp::eAdd,
+        vk::ColorComponentFlagBits::eA 
+        | vk::ColorComponentFlagBits::eR
+        | vk::ColorComponentFlagBits::eG
+        | vk::ColorComponentFlagBits::eB
+    );
     auto const blend_info = vk::PipelineColorBlendStateCreateInfo(
         { },
         VK_FALSE,
@@ -455,9 +482,7 @@ void render::create_pipeline()
     auto const pipe_layout_info = vk::PipelineLayoutCreateInfo(
         { },
         1,
-        &*desc_layout,
-        0,
-        nullptr
+        &*desc_layout
     );
 
     pipe_layout = dev->createPipelineLayoutUnique(pipe_layout_info);
@@ -532,6 +557,110 @@ void render::create_sync_objects()
     s_render_finished = dev->createSemaphoreUnique(s_info);
 }
 
+vk::CommandBuffer render::begin_single_commands()
+{
+    auto const alloc_info = vk::CommandBufferAllocateInfo(
+        *cmd_pool,
+        vk::CommandBufferLevel::ePrimary,
+        1
+    );
+
+    auto const cmd = dev->allocateCommandBuffers(alloc_info)[0];
+    auto const begin_info = vk::CommandBufferBeginInfo(
+        vk::CommandBufferUsageFlagBits::eOneTimeSubmit
+    );
+
+    cmd.begin(begin_info);
+    return cmd;
+}
+
+void render::end_single_commands(vk::CommandBuffer cmd)
+{
+    cmd.end();
+
+    auto const submit_info = vk::SubmitInfo(
+        0,
+        nullptr,
+        nullptr,
+        1,
+        &cmd
+    );
+    if (vk::Result::eSuccess != queues[gpu][QUEUE_FAMILY_GRAPHICS].submit(1, &submit_info, nullptr))
+        runtime_error("failed to submit commands.");
+
+    queues[gpu][QUEUE_FAMILY_GRAPHICS].waitIdle();
+
+    dev->freeCommandBuffers(*cmd_pool, 1, &cmd);
+}
+
+void render::copy_buffer(vk::Buffer src, vk::Buffer dst, vk::DeviceSize size)
+{
+    auto const cmd = begin_single_commands();
+    auto const copy = vk::BufferCopy(
+        0,
+        0,
+        size
+    );
+
+    cmd.copyBuffer(src, dst, 1, &copy);
+    end_single_commands(cmd);
+}
+
+void render::make_vb()
+{
+    static std::array<vertex, 4> vertices 
+    {
+        vertex({-0.5f, -0.5f, 0.f}, {0.f, 1.f, 0.f, 1.f}),
+        vertex({0.5f, -0.5f, 0.f}, {1.f, 0.f, 0.f, 1.f}),
+        vertex({0.5f, 0.5f, 0.f}, {0.f, 0.f, 1.f, 1.f}),
+        vertex({-0.5f, 0.5f, 0.f}, {1.f, 1.f, 1.f, 1.f})
+    };
+    static std::array<std::uint16_t, 6> indices
+    {
+	    0, 1, 2, 2, 3, 0
+    };
+
+    {
+        auto const s = sizeof(vertex) * vertices.size();
+
+        vk::UniqueBuffer stage;
+        vk::UniqueDeviceMemory stage_mem;
+
+        create_buffer(s, vk::BufferUsageFlagBits::eTransferSrc,
+                    vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+                    stage, stage_mem);
+        create_buffer(s, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
+                    vk::MemoryPropertyFlagBits::eDeviceLocal,
+                    vb, vm);
+
+        auto const data = dev->mapMemory(*stage_mem, 0, s);
+        std::memcpy(data, vertices.data(), s);
+        dev->unmapMemory(*stage_mem);
+
+        copy_buffer(*stage, *vb, s);
+    }
+
+    {
+        auto const s = sizeof(std::uint16_t) * indices.size();
+
+        vk::UniqueBuffer stage;
+        vk::UniqueDeviceMemory stage_mem;
+
+        create_buffer(s, vk::BufferUsageFlagBits::eTransferSrc,
+                    vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+                    stage, stage_mem);
+        create_buffer(s, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
+                    vk::MemoryPropertyFlagBits::eDeviceLocal,
+                    ib, im);
+
+        auto const data = dev->mapMemory(*stage_mem, 0, s);
+        std::memcpy(data, indices.data(), s);
+        dev->unmapMemory(*stage_mem);
+
+        copy_buffer(*stage, *ib, s);
+    }
+}
+
 void render::begin_frame(std::size_t const img)
 {
     if (vk::Result::eSuccess != dev->resetFences(1, &*f_rendering))
@@ -540,10 +669,6 @@ void render::begin_frame(std::size_t const img)
     cmd[frame]->reset();
 
     auto begin_info = vk::CommandBufferBeginInfo();
-
-    if (vk::Result::eSuccess != cmd[frame]->begin(&begin_info))
-        runtime_error("failed to begin new command.");
-
     auto const viewport = vk::Viewport(
         0.f,
         0.f,
@@ -560,7 +685,7 @@ void render::begin_frame(std::size_t const img)
 	{ 
 		vk::ClearValue(
             vk::ClearColorValue(
-                1.f, 1.f, 1.f, 1.f
+                0.f, 0.f, 0.f, 0.f
             )
         )
 	};
@@ -572,10 +697,13 @@ void render::begin_frame(std::size_t const img)
         clear_colors.data()
     );
 
+    if (vk::Result::eSuccess != cmd[frame]->begin(&begin_info))
+        runtime_error("failed to begin new command.");
+
     cmd[frame]->beginRenderPass(pass_info, vk::SubpassContents::eInline);
     cmd[frame]->setViewport(0, 1, &viewport);
     cmd[frame]->setScissor(0, 1, &scissor);
-    cmd[frame]->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipe_layout, 0, 1, &*desc, 0, nullptr);
+    //cmd[frame]->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipe_layout, 0, 1, &*desc, 0, nullptr);
 }
 
 void render::end_frame()
@@ -616,6 +744,13 @@ render::render():
     create_commands();
     create_framebuffers();
     create_sync_objects();
+
+    make_vb();
+}
+
+render::~render()
+{
+    dev->waitIdle();
 }
 
 void render::draw_frame()
@@ -636,6 +771,16 @@ void render::draw_frame()
         runtime_error("failed to acquire next image.");
 
     begin_frame(img);
+    {
+        vk::DeviceSize const offset = 0;
+        cmd[frame]->bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline);
+        cmd[frame]->bindVertexBuffers(0, 1, &*vb, &offset);
+        cmd[frame]->bindIndexBuffer(*ib, 0, vk::IndexType::eUint16);
+        cmd[frame]->drawIndexed(6, 1, 0, 0, 0);
+        cmd[frame]->drawIndexed(6, 1, 0, 0, 0);
+        cmd[frame]->drawIndexed(6, 1, 0, 0, 0);
+        cmd[frame]->drawIndexed(6, 1, 0, 0, 0);
+    }
     end_frame();
 
     auto const present_info = vk::PresentInfoKHR(

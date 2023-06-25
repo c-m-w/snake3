@@ -61,6 +61,7 @@ private:
 
     vk::UniqueDeviceMemory ubo_mem;
     vk::UniqueBuffer ubo_buf;
+    void * ubo_map;
 
     vk::UniqueDeviceMemory vm;
     vk::UniqueBuffer vb;

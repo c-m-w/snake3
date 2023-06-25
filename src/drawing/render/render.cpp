@@ -315,6 +315,17 @@ void render::create_buffers()
         ubo_buf,
         ubo_mem
     );
+    ubo_map = dev->mapMemory(*ubo_mem, 0, sizeof(ubo_t));
+
+    ubo_t ubo
+	{
+		glm::mat4(1.f),
+		glm::lookAt(glm::vec3(0.f, 0.f, 5.f), glm::vec3(0.f, 0.1f,-1.f), glm::vec3(0.f, 0.f, 1.f)),
+		glm::perspective(glm::radians(45.f), sc_info.extent.width / static_cast<float>(sc_info.extent.height),
+						 0.1f, 10.f)
+	};
+	ubo.proj[ 1 ][ 1 ] *= -1.f;
+	std::memcpy( ubo_map, &ubo, sizeof( ubo ) );
 }
 
 void render::create_buffer_descriptors()
@@ -699,7 +710,7 @@ void render::begin_frame(std::size_t const img)
     cmd[frame]->beginRenderPass(pass_info, vk::SubpassContents::eInline);
     cmd[frame]->setViewport(0, 1, &viewport);
     cmd[frame]->setScissor(0, 1, &scissor);
-    //cmd[frame]->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipe_layout, 0, 1, &*desc, 0, nullptr);
+    cmd[frame]->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipe_layout, 0, 1, &*desc, 0, nullptr);
 }
 
 void render::end_frame()

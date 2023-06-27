@@ -6,9 +6,11 @@ int main(int, char**)
 {
     settings::get()->load<int>("test", 0);
 
-    render::get();
+    camera::get();
+
     while (window::get()->poll())
     {
+        input::get()->process_repeats();
         render::get()->draw_frame();
     }
 }

@@ -14,6 +14,61 @@ namespace std
     };
 }
 
+enum draw_mode
+{
+    DRAWMODE_LINE,
+    DRAWMODE_FILL
+};
+
+template<typename T = void*>
+class i_buffer
+{
+protected:
+
+    vk::UniqueBuffer buf;
+    vk::UniqueDeviceMemory mem;
+
+public:
+
+    virtual T& operator*() = 0;
+};
+
+template<typename T>
+class host_buffer: public i_buffer<T>
+{ };
+
+template<>
+class host_buffer<ubo_t>: public i_buffer<ubo_t>
+{
+public:
+
+    host_buffer(); // todo add this
+
+    ubo_t& operator*() override;
+};
+
+class device_buffer: public i_buffer<>
+{
+private:
+
+    void*& operator*() override // todo add this
+    {return *static_cast<void**>(nullptr);};
+
+protected:
+
+    std::uint32_t n;
+
+public:
+
+    device_buffer() = default;
+    device_buffer(void * data, std::size_t size, vk::BufferUsageFlags usage);
+    device_buffer(std::uint16_t * indices, std::uint32_t n);
+    device_buffer(vertex * vertices, std::uint32_t n);
+
+    friend class render;
+
+};
+
 class render: public singleton<render>, loggable, dependable<window>
 {
 private:
@@ -33,6 +88,7 @@ private:
 #endif
 
     using queue_family_map_t = std::unordered_map<vk::PhysicalDevice, queue_family>;
+    using pipe_pair = std::pair<vk::UniquePipelineLayout, vk::UniquePipeline>;
 
     constexpr static auto NFRAMEBUFFERS = 2;
 
@@ -46,8 +102,8 @@ private:
     std::vector<vk::UniqueImageView> swap_image_views;
     std::vector<vk::UniqueFramebuffer> swap_framebuffers;
     vk::UniqueRenderPass render_pass;
-    vk::UniquePipelineLayout pipe_layout;
-    vk::UniquePipeline pipeline;
+    pipe_pair line_pipe;
+    pipe_pair triangle_pipe;
     vk::UniqueCommandPool cmd_pool;
     std::vector<vk::UniqueCommandBuffer> cmd;
 
@@ -88,7 +144,9 @@ private:
     void create_shader_module(std::vector<char> const & code, vk::UniqueShaderModule & mod);
     void create_buffers();
     void create_buffer_descriptors();
-    void create_pipeline();
+    void create_pipeline(vk::PrimitiveTopology top,
+                         std::pair<vk::UniquePipelineLayout, vk::UniquePipeline> & data);
+    void create_pipelines();
     void create_commands();
     void create_framebuffers();
     void create_sync_objects();
@@ -99,6 +157,8 @@ private:
 
     void make_vb();
 
+    void update_uniform_buffer();
+
     void begin_frame(std::size_t const img);
     void end_frame();
 
@@ -107,7 +167,11 @@ public:
     render();
     ~render();
 
+    void draw_buffer(device_buffer & vertices,
+                     device_buffer & indices,
+                     draw_mode const mode);
     void draw_frame();
 
     friend class queue_family;
+    friend class device_buffer;
 };

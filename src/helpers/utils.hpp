@@ -25,4 +25,11 @@ namespace utils
 
         return buffer;
     }
+
+    inline std::uint64_t now()
+    {
+    using namespace std::chrono;
+
+        return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+    }
 }

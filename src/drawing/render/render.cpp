@@ -18,6 +18,33 @@ namespace std
     };
 }
 
+device_buffer::device_buffer(void * data, std::size_t size, vk::BufferUsageFlags usage)
+{
+    vk::UniqueBuffer stage;
+    vk::UniqueDeviceMemory stage_mem;
+
+    render::get()->create_buffer(size, vk::BufferUsageFlagBits::eTransferSrc,
+                                 vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+                                 stage, stage_mem);
+    render::get()->create_buffer(size, vk::BufferUsageFlagBits::eTransferDst | usage,
+                                 vk::MemoryPropertyFlagBits::eDeviceLocal,
+                                 buf, mem);
+
+    auto const map = render::get()->dev->mapMemory(*stage_mem, 0, size);
+
+    std::memcpy(map, data, size);
+    render::get()->dev->unmapMemory(*stage_mem);
+    render::get()->copy_buffer(*stage, *buf, size);
+}
+
+device_buffer::device_buffer(std::uint16_t * indices, std::uint32_t n):
+    device_buffer(static_cast<void *>(indices), sizeof(uint16_t) * n, vk::BufferUsageFlagBits::eIndexBuffer)
+{ }
+
+device_buffer::device_buffer(vertex * vertices, std::uint32_t n):
+    device_buffer(static_cast<void *>(vertices), sizeof(vertex) * n, vk::BufferUsageFlagBits::eVertexBuffer)
+{ }
+
 void render::create_image_view(vk::Format fmt, vk::ImageAspectFlags flags, vk::Image const & img,
                                vk::UniqueImageView & view)
 {
@@ -316,16 +343,6 @@ void render::create_buffers()
         ubo_mem
     );
     ubo_map = dev->mapMemory(*ubo_mem, 0, sizeof(ubo_t));
-
-    ubo_t ubo
-	{
-		glm::mat4(1.f),
-		glm::lookAt(glm::vec3(0.f, 0.f, 5.f), glm::vec3(0.f, 0.1f,-1.f), glm::vec3(0.f, 0.f, 1.f)),
-		glm::perspective(glm::radians(45.f), sc_info.extent.width / static_cast<float>(sc_info.extent.height),
-						 0.1f, 10.f)
-	};
-	ubo.proj[ 1 ][ 1 ] *= -1.f;
-	std::memcpy( ubo_map, &ubo, sizeof( ubo ) );
 }
 
 void render::create_buffer_descriptors()
@@ -387,10 +404,11 @@ void render::create_buffer_descriptors()
     dev->updateDescriptorSets(writes.size(), writes.data(), 0, nullptr);
 }
 
-void render::create_pipeline()
+void render::create_pipeline(vk::PrimitiveTopology top,
+                             std::pair<vk::UniquePipelineLayout, vk::UniquePipeline> & data)
 {
-    auto const vshader = utils::load_file("/home/cole/snake3/vert.spv");
-    auto const fshader = utils::load_file("/home/cole/snake3/frag.spv");
+    auto const vshader = utils::load_file("vert.spv");
+    auto const fshader = utils::load_file("frag.spv");
 
     vk::UniqueShaderModule vertex, fragment;
 
@@ -425,7 +443,7 @@ void render::create_pipeline()
 
     auto const input_info = vk::PipelineInputAssemblyStateCreateInfo(
         { },
-        vk::PrimitiveTopology::eTriangleList,
+        top,
         false
     );
 
@@ -492,7 +510,7 @@ void render::create_pipeline()
         &*desc_layout
     );
 
-    pipe_layout = dev->createPipelineLayoutUnique(pipe_layout_info);
+    data.first = dev->createPipelineLayoutUnique(pipe_layout_info);
 
     auto const pipe_info = vk::GraphicsPipelineCreateInfo(
         { },
@@ -507,7 +525,7 @@ void render::create_pipeline()
         nullptr,
         &blend_info,
         &dynamic_state_info,
-        *pipe_layout,
+        *data.first,
         *render_pass
     );
 
@@ -515,7 +533,13 @@ void render::create_pipeline()
         result.result != vk::Result::eSuccess)
         runtime_error("failed to make pipeline.");
     else
-        pipeline = std::move(result.value);
+        data.second = std::move(result.value);
+}
+
+void render::create_pipelines()
+{
+    create_pipeline(vk::PrimitiveTopology::eLineList, line_pipe);
+    create_pipeline(vk::PrimitiveTopology::eTriangleList, triangle_pipe);
 }
 
 void render::create_commands()
@@ -668,6 +692,21 @@ void render::make_vb()
     }
 }
 
+void render::update_uniform_buffer()
+{
+    ubo_t ubo
+	{
+		glm::mat4(1.f),
+		glm::lookAt(camera::get()->view_pos(), glm::vec3(0.f, 0.f, 0.f), glm::vec3(0.f, 0.f, 1.f)),
+		glm::perspective(glm::radians(45.f), sc_info.extent.width / static_cast<float>(sc_info.extent.height),
+						 0.1f, 10.f)
+	};
+
+	ubo.proj[ 1 ][ 1 ] *= -1.f;
+
+	std::memcpy( ubo_map, &ubo, sizeof( ubo ) );
+}
+
 void render::begin_frame(std::size_t const img)
 {
     if (vk::Result::eSuccess != dev->resetFences(1, &*f_rendering))
@@ -688,7 +727,7 @@ void render::begin_frame(std::size_t const img)
         {},
         sc_info.extent
     );
-	std::vector< vk::ClearValue > clear_colors 
+	std::vector<vk::ClearValue> clear_colors 
 	{ 
 		vk::ClearValue(
             vk::ClearColorValue(
@@ -710,7 +749,7 @@ void render::begin_frame(std::size_t const img)
     cmd[frame]->beginRenderPass(pass_info, vk::SubpassContents::eInline);
     cmd[frame]->setViewport(0, 1, &viewport);
     cmd[frame]->setScissor(0, 1, &scissor);
-    cmd[frame]->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipe_layout, 0, 1, &*desc, 0, nullptr);
+    update_uniform_buffer();
 }
 
 void render::end_frame()
@@ -747,7 +786,7 @@ render::render():
     create_render_pass();
     create_buffers();
     create_buffer_descriptors();
-    create_pipeline();
+    create_pipelines();
     create_commands();
     create_framebuffers();
     create_sync_objects();
@@ -758,6 +797,33 @@ render::render():
 render::~render()
 {
     dev->waitIdle();
+}
+
+void render::draw_buffer(device_buffer & vertices,
+                         device_buffer & indices,
+                         draw_mode const mode)
+{
+    vk::DeviceSize const offset = 0;
+    pipe_pair * current = nullptr;
+
+    switch (mode)
+    {
+        case DRAWMODE_LINE:
+
+            current = &line_pipe;
+            break;
+    
+        case DRAWMODE_FILL:
+
+            current = &triangle_pipe;
+            break;
+    }
+
+    cmd[frame]->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *current->first, 0, 1, &*desc, 0, nullptr);
+    cmd[frame]->bindPipeline(vk::PipelineBindPoint::eGraphics, *current->second);
+    cmd[frame]->bindVertexBuffers(0, 1, &*vertices.buf, &offset);
+    cmd[frame]->bindIndexBuffer(*indices.buf, 0, vk::IndexType::eUint16);
+    cmd[frame]->drawIndexed(indices.n, 1, 0, 0, 0);
 }
 
 void render::draw_frame()
@@ -779,8 +845,10 @@ void render::draw_frame()
 
     begin_frame(img);
     {
+        //grid::get()->enqueue();
         vk::DeviceSize const offset = 0;
-        cmd[frame]->bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline);
+    cmd[frame]->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *triangle_pipe.first, 0, 1, &*desc, 0, nullptr);
+        cmd[frame]->bindPipeline(vk::PipelineBindPoint::eGraphics, *triangle_pipe.second);
         cmd[frame]->bindVertexBuffers(0, 1, &*vb, &offset);
         cmd[frame]->bindIndexBuffer(*ib, 0, vk::IndexType::eUint16);
         cmd[frame]->drawIndexed(6, 1, 0, 0, 0);

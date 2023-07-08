@@ -7,8 +7,8 @@ void swap_info::choose_format(vk::PhysicalDevice const & gpu, vk::SurfaceKHR con
     auto const formats = gpu.getSurfaceFormatsKHR(surface);
 
     for (auto const & fmt: formats)
-        if (vk::Format::eB8G8R8A8Srgb == fmt.format
-            && vk::ColorSpaceKHR::eSrgbNonlinear == fmt.colorSpace)
+        if (vk::Format::eB8G8R8A8Uint == fmt.format
+            && vk::ColorSpaceKHR::eAdobergbLinearEXT == fmt.colorSpace)
         {
             image_format = fmt;
             return;

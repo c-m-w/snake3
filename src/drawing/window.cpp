@@ -39,9 +39,16 @@ bool window::poll()
 
 void window::get_size(std::uint32_t & width, std::uint32_t & height)
 {
-    glfwGetFramebufferSize(wnd,
-                           reinterpret_cast<int *>(&width),
-                           reinterpret_cast<int *>(&height));
+    width = height = 0;
+
+    do
+    {
+        glfwGetFramebufferSize(wnd,
+                            reinterpret_cast<int *>(&width),
+                            reinterpret_cast<int *>(&height));
+        
+        glfwWaitEvents();
+    } while (width == 0 || height == 0);
 }
 
 window::operator GLFWwindow *() const

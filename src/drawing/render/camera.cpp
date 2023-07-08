@@ -9,14 +9,14 @@ camera::camera()
     input::get()->add_callback('W', interval_callback(
         [this]()
         {
-            distance -= 0.05f;
+            distance -= 0.1f;
         },
         5ull
     ));
     input::get()->add_callback('S', interval_callback(
         [this]()
         {
-            distance += 0.05f;
+            distance += 0.1f;
         },
         5ull
     ));
@@ -48,6 +48,11 @@ camera::camera()
         },
         5ull
     ));
+}
+
+void camera::set_distance(float const & dist)
+{
+    distance = dist;
 }
 
 glm::vec3 camera::view_pos()

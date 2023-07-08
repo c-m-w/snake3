@@ -61,7 +61,7 @@ protected:
 public:
 
     device_buffer() = default;
-    device_buffer(void * data, std::size_t size, vk::BufferUsageFlags usage);
+    device_buffer(void * data, std::size_t size, std::uint32_t n, vk::BufferUsageFlags usage);
     device_buffer(std::uint16_t * indices, std::uint32_t n);
     device_buffer(vertex * vertices, std::uint32_t n);
 
@@ -91,6 +91,12 @@ private:
     using pipe_pair = std::pair<vk::UniquePipelineLayout, vk::UniquePipeline>;
 
     constexpr static auto NFRAMEBUFFERS = 2;
+    constexpr static std::array<float, 4> BACKGROUND_COLOR {
+        0.133f,
+        0.133f,
+        0.231f,
+        1.f
+    };
 
     vk::UniqueInstance inst;
     vk::PhysicalDevice gpu;
@@ -99,6 +105,9 @@ private:
     vk::UniqueDevice dev;
     swap_info sc_info;
     vk::UniqueSwapchainKHR swapchain;
+    vk::UniqueImage color_image;
+    vk::UniqueDeviceMemory color_image_mem;
+    vk::UniqueImageView color_image_view;
     std::vector<vk::UniqueImageView> swap_image_views;
     std::vector<vk::UniqueFramebuffer> swap_framebuffers;
     vk::UniqueRenderPass render_pass;
@@ -126,6 +135,9 @@ private:
 
     std::size_t frame = 0;
 
+    void create_image(vk::Extent2D const & extent, vk::Format fmt, vk::ImageUsageFlags usage,
+                      vk::SampleCountFlagBits samples, vk::MemoryPropertyFlags flags,
+                      vk::UniqueImage & img, vk::UniqueDeviceMemory & mem);
     void create_image_view(vk::Format fmt, vk::ImageAspectFlags flags, vk::Image const & img,
                            vk::UniqueImageView & view);
     std::uint32_t mem_index(std::uint32_t type, vk::MemoryPropertyFlags flags);
@@ -141,6 +153,8 @@ private:
     void create_device();
     void create_swapchain();
     void create_render_pass();
+    void create_framebuffers();
+    void create_swapchain_dependencies();
     void create_shader_module(std::vector<char> const & code, vk::UniqueShaderModule & mod);
     void create_buffers();
     void create_buffer_descriptors();
@@ -148,7 +162,6 @@ private:
                          std::pair<vk::UniquePipelineLayout, vk::UniquePipeline> & data);
     void create_pipelines();
     void create_commands();
-    void create_framebuffers();
     void create_sync_objects();
 
     vk::CommandBuffer begin_single_commands();

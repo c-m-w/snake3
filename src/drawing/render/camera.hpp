@@ -15,5 +15,7 @@ public:
 
     camera();
 
+    void set_distance(float const & dist);
+
     glm::vec3 view_pos();
 };

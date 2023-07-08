@@ -7,6 +7,7 @@ int main(int, char**)
     settings::get()->load<int>("test", 0);
 
     camera::get();
+    grid::get();
 
     while (window::get()->poll())
     {

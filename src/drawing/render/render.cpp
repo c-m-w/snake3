@@ -18,7 +18,8 @@ namespace std
     };
 }
 
-device_buffer::device_buffer(void * data, std::size_t size, vk::BufferUsageFlags usage)
+device_buffer::device_buffer(void * data, std::size_t size, std::uint32_t n, vk::BufferUsageFlags usage):
+    n(n)
 {
     vk::UniqueBuffer stage;
     vk::UniqueDeviceMemory stage_mem;
@@ -38,12 +39,41 @@ device_buffer::device_buffer(void * data, std::size_t size, vk::BufferUsageFlags
 }
 
 device_buffer::device_buffer(std::uint16_t * indices, std::uint32_t n):
-    device_buffer(static_cast<void *>(indices), sizeof(uint16_t) * n, vk::BufferUsageFlagBits::eIndexBuffer)
+    device_buffer(static_cast<void *>(indices), sizeof(uint16_t) * n, n, vk::BufferUsageFlagBits::eIndexBuffer)
 { }
 
 device_buffer::device_buffer(vertex * vertices, std::uint32_t n):
-    device_buffer(static_cast<void *>(vertices), sizeof(vertex) * n, vk::BufferUsageFlagBits::eVertexBuffer)
+    device_buffer(static_cast<void *>(vertices), sizeof(vertex) * n, n, vk::BufferUsageFlagBits::eVertexBuffer)
 { }
+
+void render::create_image(vk::Extent2D const & extent, vk::Format fmt, vk::ImageUsageFlags usage,
+                          vk::SampleCountFlagBits samples, vk::MemoryPropertyFlags flags,
+                          vk::UniqueImage & img, vk::UniqueDeviceMemory & mem)
+{  
+    auto const image_info = vk::ImageCreateInfo(
+        {},
+        vk::ImageType::e2D,
+        fmt,
+        vk::Extent3D(extent, 1.f),
+        1,
+        1,
+        samples,
+        vk::ImageTiling::eOptimal,
+        usage,
+        vk::SharingMode::eExclusive
+    );
+
+    img = dev->createImageUnique(image_info);
+    auto const req = dev->getImageMemoryRequirements(*img);
+
+    auto const alloc_info = vk::MemoryAllocateInfo(
+        req.size,
+        mem_index(req.memoryTypeBits, flags)
+    );
+
+    mem = dev->allocateMemoryUnique(alloc_info);
+    dev->bindImageMemory(*img, *mem, 0);
+}
 
 void render::create_image_view(vk::Format fmt, vk::ImageAspectFlags flags, vk::Image const & img,
                                vk::UniqueImageView & view)
@@ -259,7 +289,9 @@ void render::create_swapchain()
         nullptr,
         sc_info.capabilities.currentTransform,
         vk::CompositeAlphaFlagBitsKHR::eOpaque,
-        sc_info.present_mode
+        sc_info.present_mode,
+        false,
+        *swapchain
     );
 
     if (indices[0] != indices[1])
@@ -271,6 +303,8 @@ void render::create_swapchain()
 
     swapchain = dev->createSwapchainKHRUnique(sc_create_info);
 
+    swap_image_views.clear();
+
     for (auto & img : dev->getSwapchainImagesKHR(*swapchain))
         create_image_view(sc_info.image_format.format, vk::ImageAspectFlagBits::eColor,
                           img, swap_image_views.emplace_back());
@@ -281,8 +315,19 @@ void render::create_render_pass()
     auto const color_attachment = vk::AttachmentDescription(
         { },
         sc_info.image_format.format,
-        vk::SampleCountFlagBits::e1,
+        vk::SampleCountFlagBits::e4,
         vk::AttachmentLoadOp::eClear,
+        vk::AttachmentStoreOp::eStore,
+        vk::AttachmentLoadOp::eDontCare,
+        vk::AttachmentStoreOp::eDontCare,
+        vk::ImageLayout::eUndefined,
+        vk::ImageLayout::eColorAttachmentOptimal
+    );
+    auto const color_resolve_attachment = vk::AttachmentDescription(
+        { },
+        sc_info.image_format.format,
+        vk::SampleCountFlagBits::e1,
+        vk::AttachmentLoadOp::eDontCare,
         vk::AttachmentStoreOp::eStore,
         vk::AttachmentLoadOp::eDontCare,
         vk::AttachmentStoreOp::eDontCare,
@@ -293,13 +338,18 @@ void render::create_render_pass()
         0,
         vk::ImageLayout::eColorAttachmentOptimal
     );
+    auto const color_resolve_ref = vk::AttachmentReference(
+        1,
+        vk::ImageLayout::eColorAttachmentOptimal
+    );
     auto const subpass = vk::SubpassDescription(
         { },
         vk::PipelineBindPoint::eGraphics,
         0,
         nullptr,
         1,
-        &color_ref
+        &color_ref,
+        &color_resolve_ref
     );
     auto const dependency = vk::SubpassDependency(
         VK_SUBPASS_EXTERNAL,
@@ -309,10 +359,15 @@ void render::create_render_pass()
         vk::AccessFlagBits::eNone,
         vk::AccessFlagBits::eColorAttachmentWrite
     );
+
+    std::array<vk::AttachmentDescription, 2> attachments {
+        color_attachment,
+        color_resolve_attachment
+    };
     auto const create_info = vk::RenderPassCreateInfo(
         { },
-        1,
-        &color_attachment,
+        attachments.size(),
+        attachments.data(),
         1,
         &subpass,
         1,
@@ -320,6 +375,42 @@ void render::create_render_pass()
     );
 
     render_pass = dev->createRenderPassUnique(create_info);
+
+    create_image(sc_info.extent, sc_info.image_format.format,
+                 vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment,
+                 vk::SampleCountFlagBits::e4, vk::MemoryPropertyFlagBits::eDeviceLocal,
+                 color_image, color_image_mem);
+    create_image_view(sc_info.image_format.format, vk::ImageAspectFlagBits::eColor, *color_image, color_image_view);
+}
+
+void render::create_framebuffers()
+{
+    swap_framebuffers.clear();
+
+    for (auto & image_view: swap_image_views)
+    {
+        std::array<vk::ImageView, 2> attachments {*color_image_view, *image_view};
+        auto const framebuffer_info = vk::FramebufferCreateInfo(
+            { },
+            *render_pass,
+            attachments.size(),
+            attachments.data(),
+            sc_info.extent.width,
+            sc_info.extent.height,
+            1
+        );
+
+        swap_framebuffers.emplace_back(dev->createFramebufferUnique(framebuffer_info));
+    }
+}
+
+void render::create_swapchain_dependencies()
+{
+    dev->waitIdle();
+
+    create_swapchain();
+    create_render_pass();
+    create_framebuffers();
 }
 
 void render::create_shader_module(std::vector<char> const & code, vk::UniqueShaderModule & mod)
@@ -481,7 +572,7 @@ void render::create_pipeline(vk::PrimitiveTopology top,
     );
     auto const multisample_info = vk::PipelineMultisampleStateCreateInfo(
         { },
-        vk::SampleCountFlagBits::e1
+        vk::SampleCountFlagBits::e4
     );
     auto const blend_attachment = vk::PipelineColorBlendAttachmentState(
         false,
@@ -503,11 +594,18 @@ void render::create_pipeline(vk::PrimitiveTopology top,
         1,
         &blend_attachment
     );
+    auto const background_push = vk::PushConstantRange(
+        vk::ShaderStageFlagBits::eFragment,
+        0,
+        sizeof(glm::vec4)
+    );
 
     auto const pipe_layout_info = vk::PipelineLayoutCreateInfo(
         { },
         1,
-        &*desc_layout
+        &*desc_layout,
+        1,
+        &background_push
     );
 
     data.first = dev->createPipelineLayoutUnique(pipe_layout_info);
@@ -558,24 +656,6 @@ void render::create_commands()
     );
 
     cmd = dev->allocateCommandBuffersUnique(cmd_info);
-}
-
-void render::create_framebuffers()
-{
-    for (auto & image_view: swap_image_views)
-    {
-        auto const framebuffer_info = vk::FramebufferCreateInfo(
-            { },
-            *render_pass,
-            1,
-            &*image_view,
-            sc_info.extent.width,
-            sc_info.extent.height,
-            1
-        );
-
-        swap_framebuffers.emplace_back(dev->createFramebufferUnique(framebuffer_info));
-    }
 }
 
 void render::create_sync_objects()
@@ -699,7 +779,7 @@ void render::update_uniform_buffer()
 		glm::mat4(1.f),
 		glm::lookAt(camera::get()->view_pos(), glm::vec3(0.f, 0.f, 0.f), glm::vec3(0.f, 0.f, 1.f)),
 		glm::perspective(glm::radians(45.f), sc_info.extent.width / static_cast<float>(sc_info.extent.height),
-						 0.1f, 10.f)
+						 0.1f, 1000.f)
 	};
 
 	ubo.proj[ 1 ][ 1 ] *= -1.f;
@@ -731,7 +811,7 @@ void render::begin_frame(std::size_t const img)
 	{ 
 		vk::ClearValue(
             vk::ClearColorValue(
-                0.f, 0.f, 0.f, 0.f
+                BACKGROUND_COLOR
             )
         )
 	};
@@ -782,13 +862,11 @@ render::render():
     get_surface();
     pick_gpu();
     create_device();
-    create_swapchain();
-    create_render_pass();
+    create_swapchain_dependencies();
     create_buffers();
     create_buffer_descriptors();
     create_pipelines();
     create_commands();
-    create_framebuffers();
     create_sync_objects();
 
     make_vb();
@@ -821,6 +899,7 @@ void render::draw_buffer(device_buffer & vertices,
 
     cmd[frame]->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *current->first, 0, 1, &*desc, 0, nullptr);
     cmd[frame]->bindPipeline(vk::PipelineBindPoint::eGraphics, *current->second);
+    cmd[frame]->pushConstants(*current->first, vk::ShaderStageFlagBits::eFragment, 0, sizeof(glm::vec4), &BACKGROUND_COLOR);
     cmd[frame]->bindVertexBuffers(0, 1, &*vertices.buf, &offset);
     cmd[frame]->bindIndexBuffer(*indices.buf, 0, vk::IndexType::eUint16);
     cmd[frame]->drawIndexed(indices.n, 1, 0, 0, 0);
@@ -838,20 +917,15 @@ void render::draw_frame()
                                                   *s_image_acquired,
                                                   nullptr,
                                                   &img);
-        res == vk::Result::eErrorOutOfDateKHR)
-        return void();
+        res == vk::Result::eErrorOutOfDateKHR
+        || res == vk::Result::eSuboptimalKHR)
+        return create_swapchain_dependencies();
     else if (res != vk::Result::eSuccess && res != vk::Result::eSuboptimalKHR)
         runtime_error("failed to acquire next image.");
 
     begin_frame(img);
     {
-        //grid::get()->enqueue();
-        vk::DeviceSize const offset = 0;
-    cmd[frame]->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *triangle_pipe.first, 0, 1, &*desc, 0, nullptr);
-        cmd[frame]->bindPipeline(vk::PipelineBindPoint::eGraphics, *triangle_pipe.second);
-        cmd[frame]->bindVertexBuffers(0, 1, &*vb, &offset);
-        cmd[frame]->bindIndexBuffer(*ib, 0, vk::IndexType::eUint16);
-        cmd[frame]->drawIndexed(6, 1, 0, 0, 0);
+        grid::get()->enqueue();
     }
     end_frame();
 
@@ -863,12 +937,22 @@ void render::draw_frame()
         &img
     );
 
-    if (auto const res = queues[gpu][QUEUE_FAMILY_PRESENT].presentKHR(present_info);
-        res == vk::Result::eErrorOutOfDateKHR
-        || res == vk::Result::eSuboptimalKHR)
-        runtime_error("failed to present image.");
-    else if (res != vk::Result::eSuccess)
-        runtime_error("failed to present image.");
+    try
+    {
+        if (auto const res = queues[gpu][QUEUE_FAMILY_PRESENT].presentKHR(present_info);
+            res == vk::Result::eErrorOutOfDateKHR
+            || res == vk::Result::eSuboptimalKHR)
+            runtime_error("failed to present image.");
+        else if (res != vk::Result::eSuccess)
+            runtime_error("failed to present image.");
+    }
+    catch (std::exception const & e)
+    {
+        if (std::string(e.what()).find("ErrorOutOfDateKHR") != std::string::npos)
+            create_swapchain_dependencies();
+        else
+            throw;
+    }
 
     frame = (frame + 1) % NFRAMEBUFFERS;
 }
